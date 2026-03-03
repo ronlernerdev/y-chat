@@ -1,0 +1,2 @@
+export const BACKEND_URL = window.location.origin;
+export const WS_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;

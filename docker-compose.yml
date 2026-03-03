@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: chatapp_user
+      POSTGRES_PASSWORD: chatapp_password
+      POSTGRES_DB: chatapp
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    restart: always
+    ports:
+      - "8082:8082"
+    environment:
+      DATABASE_URL: postgres://chatapp_user:chatapp_password@db:5432/chatapp
+      PORT: 8082
+      HOST: 0.0.0.0
+    depends_on:
+      - db
+
+volumes:
+  pgdata:

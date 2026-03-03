@@ -144,14 +144,24 @@ async fn join_server(st: web::Data<AppState>, req: web::Json<JoinServerReq>) -> 
 #[derive(Deserialize)]
 struct MakeChanReq {
     server_id: Uuid,
-    name: String
+    name: String,
+    user_id: Uuid,
 }
 
 async fn make_chan(st: web::Data<AppState>, req: web::Json<MakeChanReq>) -> impl Responder {
+    let check: Option<(Uuid,)> = sqlx::query_as("SELECT owner FROM servers WHERE id = $1 AND owner = $2")
+        .bind(&req.server_id).bind(&req.user_id)
+        .fetch_optional(&st.db).await.unwrap();
+
+    if check.is_none() {
+        return HttpResponse::Forbidden().body("Not owner");
+    }
+
     let cid = Uuid::new_v4();
     sqlx::query("INSERT INTO channels (id, server_id, name) VALUES ($1, $2, $3)")
         .bind(&cid).bind(&req.server_id).bind(&req.name)
         .execute(&st.db).await.unwrap();
+
     HttpResponse::Ok().body(cid.to_string())
 }
 
@@ -176,9 +186,18 @@ struct Channel {
     name: String
 }
 
-async fn get_channels(st: web::Data<AppState>, sid: web::Path<Uuid>) -> impl Responder {
+async fn get_channels(st: web::Data<AppState>, path: web::Path<(Uuid, Uuid)>) -> impl Responder {
+    let (sid, uid) = path.into_inner();
+    let check: Option<(Uuid,)> = sqlx::query_as("SELECT user_id FROM members WHERE server_id = $1 AND user_id = $2")
+        .bind(&sid).bind(&uid)
+        .fetch_optional(&st.db).await.unwrap();
+
+    if check.is_none() {
+        return HttpResponse::Forbidden().body("Not a member");
+    }
+
     let res = sqlx::query_as::<_, Channel>("SELECT * FROM channels WHERE server_id = $1")
-        .bind(sid.into_inner())
+        .bind(&sid)
         .fetch_all(&st.db).await.unwrap();
     HttpResponse::Ok().json(res)
 }
@@ -193,9 +212,19 @@ struct MsgRes {
     created_at: Option<DateTime<Utc>>
 }
 
-async fn get_msgs(st: web::Data<AppState>, cid: web::Path<Uuid>) -> impl Responder {
+async fn get_msgs(st: web::Data<AppState>, path: web::Path<(Uuid, Uuid)>) -> impl Responder {
+    let (cid, uid) = path.into_inner();
+
+    let check: Option<(Uuid,)> = sqlx::query_as("SELECT m.user_id FROM members m JOIN channels c ON m.server_id = c.server_id WHERE c.id = $1 AND m.user_id = $2")
+        .bind(&cid).bind(&uid)
+        .fetch_optional(&st.db).await.unwrap();
+
+    if check.is_none() {
+        return HttpResponse::Forbidden().body("Not a member");
+    }
+
     let res = sqlx::query_as::<_, MsgRes>("SELECT * FROM v2_messages WHERE channel_id = $1 ORDER BY created_at ASC")
-        .bind(cid.into_inner())
+        .bind(&cid)
         .fetch_all(&st.db).await.unwrap();
     HttpResponse::Ok().json(res)
 }
@@ -385,15 +414,15 @@ async fn main() -> std::io::Result<()> {
             .route("/js", web::post().to(join_server))
             .route("/mc", web::post().to(make_chan))
             .route("/s/{uid}", web::get().to(get_servers))
-            .route("/c/{sid}", web::get().to(get_channels))
-            .route("/m/{cid}", web::get().to(get_msgs))
+            .route("/c/{sid}/{uid}", web::get().to(get_channels))
+            .route("/m/{cid}/{uid}", web::get().to(get_msgs))
             .route("/u/{sid}", web::get().to(get_users))
             .route("/pk/{uid}", web::get().to(get_pubkey))
             .route("/sk", web::post().to(store_server_key))
             .route("/sk/{sid}/{uid}", web::get().to(get_server_key))
             .route("/sk/pending/{sid}", web::get().to(get_pending_members))
             .route("/ws", web::get().to(ws))
-            .service(Files::new("/", "../frontend_v2_leptos/dist").index_file("index.html"))
+            .service(Files::new("/", "../frontend/dist").index_file("index.html"))
     })
     .bind((host, port))?
     .run()

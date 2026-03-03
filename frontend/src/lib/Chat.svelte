@@ -144,7 +144,7 @@
     usersInServer = [];
 
     try {
-      const cRes = await fetch(`${BACKEND_URL}/c/${id}`);
+      const cRes = await fetch(`${BACKEND_URL}/c/${id}/${currentUser.id}`);
       if (cRes.ok) channels = await cRes.json();
 
       const uRes = await fetch(`${BACKEND_URL}/u/${id}`);
@@ -179,7 +179,7 @@
   async function selectChannel(id: string) {
     activeChannel = id;
     try {
-      const res = await fetch(`${BACKEND_URL}/m/${id}`);
+      const res = await fetch(`${BACKEND_URL}/m/${id}/${currentUser.id}`);
       if (!res.ok) return;
       const msgs: MsgRes[] = await res.json();
 
@@ -397,7 +397,7 @@
       await fetch(`${BACKEND_URL}/mc`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newChanName, server_id: activeServer }),
+        body: JSON.stringify({ name: newChanName, server_id: activeServer, user_id: currentUser.id }),
       });
       newChanName = "";
       selectServer(activeServer);

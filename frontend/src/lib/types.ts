@@ -1,6 +1,6 @@
 export interface User {
     id: string; // uuid
-    username: string;
+    un: string;
     pk: string;
 }
 

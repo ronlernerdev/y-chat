@@ -75,7 +75,7 @@
 
       if (resp.ok){
         const loginresponse:LoginResponse = await resp.json();
-        const usery:User = {id:loginresponse.id,username:loginresponse.un,pk:loginresponse.pk}
+        const usery:User = {id:loginresponse.id,un:loginresponse.un,pk:loginresponse.pk}
         localStorage.setItem(`private_key_ig_${usery.id}`, privatey);
         localStorage.setItem("dih-user", JSON.stringify(usery));
 
@@ -109,7 +109,7 @@
 
     if(resp.ok){
       const loginresponse:LoginResponse = await resp.json();
-      const usery:User = {id:loginresponse.id,username:loginresponse.un,pk:loginresponse.pk};
+      const usery:User = {id:loginresponse.id,un:loginresponse.un,pk:loginresponse.pk};
 
       localStorage.setItem("dih-user",JSON.stringify(usery));
       if (loginresponse.encrypted_privkey && loginresponse.privkey_salt && loginresponse.privkey_iv) {

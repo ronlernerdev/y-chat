@@ -5,7 +5,7 @@ to run this:
 1. `docker compose up -d --build`
 2. open `http://localhost:8082`
 
-to expose this application for testing you can run
+or simpler (for testing, also tunnels using cloudflared to expose this application)
 `./start.sh`
 
 thats it.

@@ -16,3 +16,9 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 bcrypt = "0.15"
 dotenv = "0.15"
 chrono = { version = "0.4", features = ["serde"] }
+aws-sdk-s3 = "1.125.0"
+aws-config = "1.8.15"
+tokio-stream = "0.1.18"
+futures-util = "0.3.32"
+bytes = "1.11.1"
+base64 = "0.22.1"

@@ -1,5 +1,7 @@
 # Build frontend
-FROM node:20-alpine AS build-frontend
+FROM node:20-slim AS build-frontend
+# Set a higher memory limit for Node.js to prevent silent OOM kills during Vite build
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 WORKDIR /app/frontend
 # Explicitly copy package files first for better caching
 COPY frontend/package.json ./
@@ -8,8 +10,7 @@ COPY frontend .
 RUN npm run build
 
 # Build backend
-FROM rust:1.85-alpine AS build-backend
-RUN apk add --no-cache musl-dev
+FROM rust:slim AS build-backend
 WORKDIR /app/backend
 COPY backend/Cargo.toml backend/Cargo.lock ./
 RUN mkdir src && echo "fn main() {}" > src/main.rs
@@ -19,8 +20,9 @@ COPY backend .
 RUN touch src/main.rs && cargo build --release
 
 # Final runtime image
-FROM alpine:3.19
-RUN apk add --no-cache libgcc
+FROM debian:bookworm-slim
+# Install libssl and ca-certificates which might be needed by SQLx/Actix
+RUN apt-get update && apt-get install -y ca-certificates libssl-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build-backend /app/backend/target/release/backend_v2 .
 # The backend binary expects the dist folder at ../frontend/dist relative to its execution path

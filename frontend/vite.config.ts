@@ -6,6 +6,6 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [tailwindcss(), svelte()],
   server: {
-    allowedHosts: ['westminster-jump-massachusetts-which.trycloudflare.com']
+    allowedHosts: ['inbox-obviously-motel-enabled.trycloudflare.com']
   }
 })

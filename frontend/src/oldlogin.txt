@@ -1,0 +1,59 @@
+<div class="min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-sm p-8">
+    <h1 class="mb-8 text-center">y-chat</h1>
+
+    <div class="space-y-6">
+      <section>
+        <h2 class="mb-2">Join</h2>
+        <input
+          class="w-full"
+          placeholder="username"
+          bind:value={reg_un}
+        />
+        <input
+          type="password"
+          class="w-full mt-2"
+          placeholder="password"
+          bind:value={reg_pw}
+        />
+        <button
+          class="w-full mt-2"
+          onclick={makeaccount}
+        >
+          CREATE ACCOUNT
+        </button>
+      </section>
+
+      <div class="relative">
+        <span class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          or
+        </span>
+      </div>
+
+      <section>
+        <h2 class="mb-2">Log In</h2>
+        <input
+          class="w-full"
+          placeholder="username"
+          bind:value={log_un}
+        />
+        <input
+          type="password"
+          class="w-full mt-2"
+          placeholder="password"
+          bind:value={log_pw}
+        />
+        <button
+          class="w-full mt-2"
+          onclick={dologin}
+        >
+          LOG IN
+        </button>
+      </section>
+    </div>
+
+    <p class="mt-6 text-center">{status}</p>
+  </div>
+
+
+  </div>

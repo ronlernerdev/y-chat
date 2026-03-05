@@ -12,6 +12,8 @@
     importAesKey,
     aesEncrypt,
     aesDecrypt,
+    aesEncryptBytes,
+    aesDecryptBytes
   } from "./crypto";
 
   const {
@@ -42,12 +44,14 @@
     author_id: string;
     encrypted_content: string;
     nonce: string;
+    attachment: string | null;
   }
 
   interface DisplayMsg {
     id: string;
     author_id: string;
     content: string;
+    attachment?: string;
   }
 
   type WsMsg =
@@ -57,6 +61,7 @@
         author_id: string;
         encrypted_content: string;
         nonce: string;
+        attachment?: string | null;
       }
     | {
         type: "KeyRequest";
@@ -85,8 +90,17 @@
   let newChanName = $state("");
   let joinServerId = $state("");
   let inputText = $state("");
+  let selectedFile = $state<File | null>(null);
+  let decryptedImages = $state<Record<string, string>>({});
 
   let ws: WebSocket | null = null;
+
+  async function handleFile(ev: Event) {
+    const t = ev.target as HTMLInputElement;
+    if (t.files && t.files.length > 0) {
+      selectedFile = t.files[0];
+    }
+  }
 
   async function fetchAndLoadServerKey(sid: string, uid: string, pem: string): Promise<string | null> {
     try {
@@ -197,9 +211,12 @@
         if (aesKey) {
           try {
             content = await aesDecrypt(m.encrypted_content, m.nonce, aesKey);
+            if (m.attachment) {
+               fetchAndDecryptImage(m.attachment, aesKey);
+            }
           } catch {}
         }
-        display.push({ id: m.id, author_id: m.author_id, content });
+        display.push({ id: m.id, author_id: m.author_id, content, attachment: m.attachment || undefined });
       }
       messages = display;
     } catch {
@@ -232,7 +249,7 @@
         try {
           const parsed: WsMsg = JSON.parse(ev.data);
           if (parsed.type === "Chat") {
-            const { channel_id, author_id, encrypted_content, nonce } = parsed;
+            const { channel_id, author_id, encrypted_content, nonce, attachment } = parsed;
             if (activeChannel === channel_id) {
               const sid = activeServer;
               let aesKey: CryptoKey | null = null;
@@ -246,12 +263,15 @@
               if (aesKey) {
                 try {
                   content = await aesDecrypt(encrypted_content, nonce, aesKey);
+                  if (attachment) {
+                     fetchAndDecryptImage(attachment, aesKey);
+                  }
                 } catch {}
               }
 
               messages = [
                 ...messages,
-                { id: crypto.randomUUID(), author_id, content },
+                { id: crypto.randomUUID(), author_id, content, attachment: attachment || undefined },
               ];
             }
           } else if (parsed.type === "KeyRequest") {
@@ -338,8 +358,43 @@
         ws.onclose = null;
         ws.close();
       }
+      Object.values(decryptedImages).forEach(url => URL.revokeObjectURL(url));
     };
   });
+
+  function arrayBufferToBase64(buffer: ArrayBuffer): string {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  }
+
+  function base64ToArrayBuffer(base64: string): ArrayBuffer {
+    const binaryStr = window.atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }
+
+  async function fetchAndDecryptImage(url: string, key: CryptoKey) {
+      if (decryptedImages[url]) return;
+      try {
+          const res = await fetch(url);
+          const metaB64 = res.headers.get("X-Aes-Nonce");
+          if (!metaB64) return;
+          const encBuf = await res.arrayBuffer();
+          const nonce = base64ToArrayBuffer(metaB64);
+          const dec = await aesDecryptBytes(encBuf, nonce, key);
+          const blob = new Blob([dec]);
+          decryptedImages[url] = URL.createObjectURL(blob);
+      } catch (e) {
+          console.error("Failed image decrypt", e);
+      }
+  }
 
   async function createServer() {
     if (!newServerName) return;
@@ -406,7 +461,7 @@
 
   async function sendMessage(ev: Event) {
     ev.preventDefault();
-    if (!inputText || !activeChannel || !activeServer) return;
+    if ((!inputText && !selectedFile) || !activeChannel || !activeServer) return;
 
     try {
       console.log("SENDING MESSAGE...");
@@ -417,18 +472,35 @@
       const aesB64 = serverKeys[activeServer];
       if (aesB64) {
         const aesKey = await importAesKey(aesB64);
-        const { ciphertextB64, nonceB64 } = await aesEncrypt(inputText, aesKey);
+        let attachmentUrl = null;
+        
+        if (selectedFile) {
+          const rawBuf = await selectedFile.arrayBuffer();
+          const { ciphertext, nonce } = await aesEncryptBytes(rawBuf, aesKey);
+          const nonceB64 = arrayBufferToBase64(nonce);
+          
+          const ext = selectedFile.name.split('.').pop() || "png";
+          const res = await fetch(`${BACKEND_URL}/up?ext=${ext}&nonce=${encodeURIComponent(nonceB64)}`, {
+            method: "POST",
+            body: ciphertext,
+            headers: { "Content-Type": "application/octet-stream" }
+          });
+          attachmentUrl = await res.text();
+          selectedFile = null;
+        }
+
+        const txt = inputText || "[picture]";
+        const { ciphertextB64, nonceB64: txtNonce } = await aesEncrypt(txt, aesKey);
 
         const msg: WsMsg = {
           type: "Chat",
           channel_id: activeChannel,
           author_id: currentUser.id,
           encrypted_content: ciphertextB64,
-          nonce: nonceB64,
+          nonce: txtNonce,
+          attachment: attachmentUrl
         };
-        console.log("WS STATE:", ws?.readyState);
         ws?.send(JSON.stringify(msg));
-        console.log("Sent msg:", msg);
         inputText = "";
       }
     } catch (e) {
@@ -517,12 +589,19 @@
             <span>
               {m.content}
             </span>
+            {#if m.attachment && decryptedImages[m.attachment]}
+               <img src={decryptedImages[m.attachment]} class="max-w-xs mt-2" alt="pic" />
+            {/if}
           </div>
         {/each}
       </div>
 
       <div class="p-2">
         <form onsubmit={sendMessage} class="flex items-center">
+          <input type="file" id="pic" accept="image/*" class="hidden" onchange={handleFile} />
+          <button type="button" onclick={() => document.getElementById("pic")?.click()} class="mr-2 text-xs border px-2 py-1">
+             {selectedFile ? "+" : "pic"}
+          </button>
           <span class="mr-2">{">"}</span>
           <input
             type="text"

@@ -14,6 +14,8 @@ use chrono::{DateTime, Utc};
 struct AppState {
     db: PgPool,
     tx: Arc<broadcast::Sender<String>>,
+    s3: Arc<aws_sdk_s3::Client>,
+    bucket: String,
 }
 
 #[derive(Deserialize)]
@@ -209,6 +211,7 @@ struct MsgRes {
     author_id: Uuid,
     encrypted_content: String,
     nonce: String,
+    attachment: Option<String>,
     created_at: Option<DateTime<Utc>>
 }
 
@@ -316,7 +319,8 @@ enum WsMsg {
         channel_id: String,
         author_id: String,
         encrypted_content: String,
-        nonce: String
+        nonce: String,
+        attachment: Option<String>,
     },
     KeyRequest {
         server_id: String,
@@ -344,12 +348,12 @@ async fn ws(req: HttpRequest, body: web::Payload, st: web::Data<AppState>) -> Re
                         match serde_json::from_str::<WsMsg>(&t) {
                             Ok(parsed) => {
                                 match parsed {
-                                    WsMsg::Chat { channel_id, author_id, encrypted_content, nonce } => {
+                                    WsMsg::Chat { channel_id, author_id, encrypted_content, nonce, attachment } => {
                                         match (Uuid::parse_str(&channel_id), Uuid::parse_str(&author_id)) {
                                             (Ok(cid), Ok(aid)) => {
                                                 let mid = Uuid::new_v4();
-                                                let res = sqlx::query("INSERT INTO v2_messages (id, channel_id, author_id, encrypted_content, nonce) VALUES ($1, $2, $3, $4, $5)")
-                                                    .bind(&mid).bind(&cid).bind(&aid).bind(&encrypted_content).bind(&nonce)
+                                                let res = sqlx::query("INSERT INTO v2_messages (id, channel_id, author_id, encrypted_content, nonce, attachment) VALUES ($1, $2, $3, $4, $5, $6)")
+                                                    .bind(&mid).bind(&cid).bind(&aid).bind(&encrypted_content).bind(&nonce).bind(&attachment)
                                                     .execute(&db).await;
                                                 if let Err(e) = res {
                                                     println!("DB Error: {:?}", e);
@@ -389,14 +393,52 @@ async fn ws(req: HttpRequest, body: web::Payload, st: web::Data<AppState>) -> Re
     Ok(response)
 }
 
+#[derive(Deserialize)]
+struct UpQuery { ext: String, nonce: String }
+
+async fn upload_pic(st: web::Data<AppState>, q: web::Query<UpQuery>, bytes: actix_web::web::Bytes) -> impl Responder {
+    let key = format!("{}.{}", Uuid::new_v4(), q.ext);
+    st.s3.put_object()
+        .bucket(&st.bucket)
+        .key(&key)
+        .metadata("aes-nonce", &q.nonce)
+        .body(bytes.to_vec().into())
+        .send().await.unwrap();
+    
+    let url = format!("{}/d/{}", std::env::var("BACKEND_URL").unwrap_or_else(|_| "http://localhost:8082".to_string()), key);
+    HttpResponse::Ok().body(url)
+}
+
+async fn download_pic(st: web::Data<AppState>, path: web::Path<String>) -> impl Responder {
+    let key = path.into_inner();
+    match st.s3.get_object().bucket(&st.bucket).key(&key).send().await {
+        Ok(obj) => {
+            let metadata = obj.metadata().unwrap_or(&std::collections::HashMap::new()).clone();
+            let nonce = metadata.get("aes-nonce").cloned().unwrap_or_default();
+            
+            let bytes = obj.body.collect().await.unwrap().into_bytes();
+            
+            HttpResponse::Ok()
+                .append_header(("X-Aes-Nonce", nonce))
+                .append_header(("Access-Control-Expose-Headers", "X-Aes-Nonce"))
+                .body(bytes)
+        }
+        Err(_) => HttpResponse::NotFound().finish()
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
+    let config = aws_config::load_from_env().await;
+    let s3_client = aws_sdk_s3::Client::new(&config);
+    let bucket = std::env::var("S3_BUCKET").unwrap_or_else(|_| "y-chat-storage".to_string());
+    
     let u = std::env::var("DATABASE_URL").unwrap();
     let p = sqlx::PgPool::connect(&u).await.unwrap();
     sqlx::migrate!("./migrations").run(&p).await.unwrap();
     let (tx, _) = broadcast::channel(100);
-    let st = AppState { db: p, tx: Arc::new(tx) };
+    let st = AppState { db: p, tx: Arc::new(tx), s3: Arc::new(s3_client), bucket };
 
     let port: u16 = std::env::var("PORT").unwrap().parse().unwrap();
     let host = std::env::var("HOST").unwrap();
@@ -421,6 +463,8 @@ async fn main() -> std::io::Result<()> {
             .route("/sk", web::post().to(store_server_key))
             .route("/sk/{sid}/{uid}", web::get().to(get_server_key))
             .route("/sk/pending/{sid}", web::get().to(get_pending_members))
+            .route("/up", web::post().to(upload_pic))
+            .route("/d/{key}", web::get().to(download_pic))
             .route("/ws", web::get().to(ws))
             .service(Files::new("/", "../frontend/dist").index_file("index.html"))
     })

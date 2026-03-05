@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import AuthCard from "./lib/AuthCard.svelte";
   import Chat from "./lib/Chat.svelte";
   import {
     generateKeyPair,
@@ -37,7 +38,10 @@
       console.error("COULDNT RESTORE USER WAHAAH", e);
     }
   });
-  async function makeaccount(){
+
+  async function makeaccount(event: { detail: { username: string; password: string; remember: string; }; }){
+    const { username, password, remember } = event.detail;
+
     status = "gen"
 
     try {
@@ -45,7 +49,6 @@
       const pub = await exportPublicKey(publicKey);
       const privatey = await exportPrivateKey(privateKey);
 
-      const password = reg_pw
       let encPk, salt, iv
       try {
         const encrypted = await encryptPrivateKey(privatey, password)
@@ -58,7 +61,7 @@
       }
 
       const body = {
-        un: reg_un,
+        un: username,
         pw: password,
         pk: pub,
         av: null,
@@ -92,12 +95,13 @@
   }
 
 
-  async function dologin(){
+  async function dologin(event: { detail: { username: string; password: string; remember: string; }; }){
+    const { username, password, remember } = event.detail;
+
     status = "logging";
     try {
-    const password = log_pw;
     const body = {
-      un:log_un,
+      un:username,
       pw:password,
     }
 
@@ -155,61 +159,9 @@
 {#if user}
 <Chat currentUser={user} storedPrivkeyPem={privkeyPem} onKeyRecovered={handleKeyRecovered} />
 {:else}
-<div class="min-h-screen flex items-center justify-center p-4">
-  <div class="w-full max-w-sm p-8">
-    <h1 class="mb-8 text-center">y-chat</h1>
+<AuthCard
+    on:signin={dologin}
+    on:signup={makeaccount}
+    />
 
-    <div class="space-y-6">
-      <section>
-        <h2 class="mb-2">Join</h2>
-        <input
-          class="w-full"
-          placeholder="username"
-          bind:value={reg_un}
-        />
-        <input
-          type="password"
-          class="w-full mt-2"
-          placeholder="password"
-          bind:value={reg_pw}
-        />
-        <button
-          class="w-full mt-2"
-          onclick={makeaccount}
-        >
-          CREATE ACCOUNT
-        </button>
-      </section>
-
-      <div class="relative">
-        <span class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-          or
-        </span>
-      </div>
-
-      <section>
-        <h2 class="mb-2">Log In</h2>
-        <input
-          class="w-full"
-          placeholder="username"
-          bind:value={log_un}
-        />
-        <input
-          type="password"
-          class="w-full mt-2"
-          placeholder="password"
-          bind:value={log_pw}
-        />
-        <button
-          class="w-full mt-2"
-          onclick={dologin}
-        >
-          LOG IN
-        </button>
-      </section>
-    </div>
-
-    <p class="mt-6 text-center">{status}</p>
-  </div>
-</div>
 {/if}

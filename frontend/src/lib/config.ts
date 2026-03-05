@@ -1,2 +1,2 @@
-export const BACKEND_URL = window.location.origin;
-export const WS_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
+export const BACKEND_URL = 'https://aims-wichita-moore-bit.trycloudflare.com';
+export const WS_URL = `wss://aims-wichita-moore-bit.trycloudflare.com/ws`;

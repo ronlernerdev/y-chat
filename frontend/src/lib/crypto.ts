@@ -120,6 +120,32 @@ export async function aesDecrypt(ciphertextB64: string, nonceB64: string, key: C
     }
 }
 
+export async function aesEncryptBytes(data: ArrayBuffer, key: CryptoKey): Promise<{ ciphertext: ArrayBuffer, nonce: ArrayBuffer }> {
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const ciphertext = await window.crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: iv },
+        key,
+        data
+    );
+    return {
+        ciphertext,
+        nonce: iv.buffer
+    };
+}
+
+export async function aesDecryptBytes(ciphertext: ArrayBuffer, nonce: ArrayBuffer, key: CryptoKey): Promise<ArrayBuffer> {
+    try {
+        const decrypted = await window.crypto.subtle.decrypt(
+            { name: "AES-GCM", iv: new Uint8Array(nonce) },
+            key,
+            ciphertext
+        );
+        return decrypted;
+    } catch (e) {
+        throw new Error("[Binary Decryption Failed]");
+    }
+}
+
 export async function rsaWrapKey(aesKeyB64: string, publicKey: CryptoKey): Promise<string> {
     const buffer = base64ToArrayBuffer(aesKeyB64);
     const wrapped = await window.crypto.subtle.encrypt(

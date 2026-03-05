@@ -523,12 +523,15 @@
         <h3 class="mb-3">{">"} servers</h3>
         <ul class="space-y-1">
           {#each servers as s}
-            <li
-              class="cursor-pointer"
-              onclick={() => selectServer(s.id)}
-            >
-              {activeServer === s.id ? "> " : "  "}
-              {s.name}
+            <li>
+              <button
+                type="button"
+                class="w-full text-left cursor-pointer"
+                onclick={() => selectServer(s.id)}
+              >
+                {activeServer === s.id ? "> " : "  "}
+                {s.name}
+              </button>
             </li>
           {/each}
           <li class="mt-4">
@@ -558,12 +561,15 @@
           </div>
           <ul class="space-y-1">
             {#each channels as c}
-              <li
-                class="cursor-pointer"
-                onclick={() => selectChannel(c.id)}
-              >
-                {activeChannel === c.id ? "> #" : "  #"}
-                {c.name}
+              <li>
+                <button
+                  type="button"
+                  class="w-full text-left cursor-pointer"
+                  onclick={() => selectChannel(c.id)}
+                >
+                  {activeChannel === c.id ? "> #" : "  #"}
+                  {c.name}
+                </button>
               </li>
             {/each}
             <li class="mt-4">

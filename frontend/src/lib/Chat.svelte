@@ -526,7 +526,8 @@
             <li>
               <button
                 type="button"
-                class="w-full text-left cursor-pointer"
+                class="w-full text-left"
+                aria-current={activeServer === s.id ? "page" : undefined}
                 onclick={() => selectServer(s.id)}
               >
                 {activeServer === s.id ? "> " : "  "}
@@ -564,7 +565,8 @@
               <li>
                 <button
                   type="button"
-                  class="w-full text-left cursor-pointer"
+                  class="w-full text-left"
+                  aria-current={activeChannel === c.id ? "page" : undefined}
                   onclick={() => selectChannel(c.id)}
                 >
                   {activeChannel === c.id ? "> #" : "  #"}
